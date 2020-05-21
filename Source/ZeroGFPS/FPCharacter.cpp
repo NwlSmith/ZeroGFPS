@@ -8,6 +8,7 @@ AFPCharacter::AFPCharacter()
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = true;
 
 	UCapsuleComponent* cap = GetCapsuleComponent();
 
@@ -17,7 +18,6 @@ AFPCharacter::AFPCharacter()
 	Camera->SetupAttachment(cap);
 	Camera->SetRelativeLocation(FVector(-39.56f, 1.75f, 64.0f));
 	Camera->bUsePawnControlRotation = true;
-
 }
 
 // Called when the game starts or when spawned
@@ -33,7 +33,44 @@ void AFPCharacter::BeginPlay()
 void AFPCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	// if floating,
+	// get velocity vector,
+	// linetrace from character in dir of velocity
+	// set target up to normal of hit
 
+	FHitResult OutHit;
+	FVector Start = GetActorLocation();
+
+	FVector Direction = GetVelocity().GetSafeNormal();
+	Direction = -GetActorUpVector();
+	FVector End = ((Direction * 5000.f) + Start);
+	FCollisionQueryParams CollisionParams;
+	//UE_LOG(LogTemp, Warning, TEXT("ticking"));
+
+	GetCharacterMovement()->GravityScale = 0.0f;
+
+
+	if (GetWorld()->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, CollisionParams))
+	{
+		// set body rotation, not camera?
+		FRotator Rot = OutHit.ImpactNormal.Rotation();
+		FVector vec = FVector::CrossProduct(GetActorRightVector(), OutHit.Normal);
+		Rot = vec.Rotation();
+		//GetController()->SetControlRotation(Rot);
+		SetActorRotation(Rot);
+		
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Rot: %s"), *vec.ToString()));
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Normal: %s"), *OutHit.Normal.ToString()));
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Object: %s"), *OutHit.Actor->GetHumanReadableName()));
+
+		
+	}
+
+
+	// otherwise, set actor rotation to normal
+
+
+	// if not floating, make gravity just point downward?
 	if (CanJump())
 	{
 
@@ -73,7 +110,10 @@ void AFPCharacter::MoveForward(float Val)
 
 void AFPCharacter::MoveRight(float Val)
 {
-	AddMovementInput(GetActorRightVector(), Val);
+	if (Val != 0)
+	{
+		AddMovementInput(GetActorRightVector(), Val);
+	}
 }
 
 void AFPCharacter::JumpPressed()
@@ -90,12 +130,12 @@ void AFPCharacter::JumpReleased()
 {
 	if (CanJump())
 	{
-		float jumpPower = 0.0f;
-		jumpPower = MaxJumpForce * FMath::Clamp(Wrld->GetTimeSeconds() - TimeJumpPressed, 0.0f, MaxJumpTime) / MaxJumpTime;
+		float jumpPower = 1000.0f;
+		//jumpPower = MaxJumpForce * FMath::Clamp(Wrld->GetTimeSeconds() - TimeJumpPressed, 0.0f, MaxJumpTime) / MaxJumpTime;
 
 		LaunchCharacter(GetActorUpVector() * jumpPower, false, false);
 
-		bSimGravityDisabled = true;
+		GetCharacterMovement()->GravityScale = 0.0f;
 		// Stop lowering and shaking animation.
 	}
 }
@@ -113,12 +153,13 @@ void AFPCharacter::NotifyHit
 )
 {
 	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
-	FRotator rot = FVector::CrossProduct(GetActorRightVector(), -HitNormal).Rotation();
-	SetActorRotation(rot,ETeleportType::None);
-	bSimGravityDisabled = false;
+
+	FRotator rot = FVector::CrossProduct(GetActorRightVector(), HitNormal).Rotation();
+	GetController()->SetControlRotation(rot);
+	GetCharacterMovement()->GravityScale = 1.0f;
+
+	
 	UE_LOG(LogTemp, Warning, TEXT("Actor was hit"));
-	//UE_LOG(LogTemp, Warning, TEXT("new vector is %s"), FVector::CrossProduct(GetActorRightVector(), HitNormal));
-	//OtherActor->GetFName()->SafeString()
 }
 
 void AFPCharacter::Interact()

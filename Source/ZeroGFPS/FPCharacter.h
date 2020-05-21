@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
@@ -29,6 +30,9 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Jump Parameters")
 		UWorld* Wrld;
+
+	UPROPERTY()
+		FVector TargetDirection;
 
 
 public:
