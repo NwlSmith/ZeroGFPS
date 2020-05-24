@@ -48,6 +48,7 @@ void AFPCharacter::Tick(float DeltaTime)
 	//UE_LOG(LogTemp, Warning, TEXT("ticking"));
 
 	GetCharacterMovement()->GravityScale = 0.0f;
+	
 
 
 	if (GetWorld()->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, CollisionParams))
@@ -58,7 +59,9 @@ void AFPCharacter::Tick(float DeltaTime)
 		Rot = vec.Rotation();
 		//GetController()->SetControlRotation(Rot);
 		SetActorRotation(Rot);
-		
+
+		GetCharacterMovement()->AddForce(OutHit.ImpactNormal * -1.0f * 980.0f);
+
 		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Rot: %s"), *vec.ToString()));
 		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Normal: %s"), *OutHit.Normal.ToString()));
 		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Object: %s"), *OutHit.Actor->GetHumanReadableName()));
