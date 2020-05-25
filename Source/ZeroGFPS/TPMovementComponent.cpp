@@ -3,7 +3,6 @@
 
 #include "TPMovementComponent.h"
 
-
 void UTPMovementComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -15,7 +14,7 @@ void UTPMovementComponent::TickComponent(float DeltaTime, enum ELevelTick TickTy
 	}
 
 	AActor* Actor = GetOwner(); //->GetComponentByClass(UPrimitiveComponent::StaticClass());
-	ATPPawn* Pawn = Cast<ATPPawn>(Actor);
+	ATPPawn*  Pawn = Cast<ATPPawn>(Actor);
 
 
 	// Get (and then clear) the movement vector that we set in ACollidingPawn::Tick

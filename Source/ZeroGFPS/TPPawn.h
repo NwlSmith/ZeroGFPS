@@ -48,7 +48,19 @@ public:
 		float MaxSpeed = 600.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
+		float RotationSpeed = 75.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
 		float InAirMovementDampener = 0.1f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
+		float MoveMouseTransitionBeginTime = 5.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
+		float SurfaceTransitionThreshold = 0.05f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
+		float TimeAtLastMoveMouse = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
 		bool OnGround = true;
@@ -62,8 +74,14 @@ protected:
 	void SetupMesh();
 	void SetupMovementComponent();
 
+	bool CheckIfNeedToTransitionToNewSurface(FVector HitNormal);
+	void TransitionToNewSurface(FHitResult HitNormal);
+
 	void MoveForward(float AxisValue);
 	void MoveRight(float AxisValue);
+
+	virtual void AddControllerPitchInput(float AxisValue) override;
+	virtual void AddControllerYawInput(float AxisValue) override;
 
 	void JumpPressed();
 	void JumpReleased();

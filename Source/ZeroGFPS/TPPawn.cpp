@@ -23,7 +23,7 @@ ATPPawn::ATPPawn()
 void ATPPawn::SetupCapsule()
 {
 	Capsule = CreateDefaultSubobject<UCapsuleComponent>(FName(TEXT("Capsule")));
-	Capsule->InitCapsuleSize(40.0f, 96.0f);
+	Capsule->InitCapsuleSize(40.0f, 92.0f);
 	Capsule->SetSimulatePhysics(true);
 	Capsule->SetEnableGravity(false);
 	Capsule->SetCollisionObjectType(ECollisionChannel::ECC_Pawn);
@@ -34,13 +34,10 @@ void ATPPawn::SetupCamera()
 {
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(FName(TEXT("SpringArm")));
 	SpringArm->SetupAttachment(RootComponent);
-	//SpringArm->SetRelativeLocation(FVector(0.0f, 1.75f, 55.0f));
 
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(FName(TEXT("Camera")));
 	Camera->SetupAttachment(SpringArm);
-	//Camera->SetRelativeLocation(FVector(-20.0f, 1.75f, 64.0f));
-	//Camera->bUsePawnControlRotation = true;
 }
 
 void ATPPawn::SetupMesh()
@@ -61,7 +58,6 @@ void ATPPawn::SetupMovementComponent()
 void ATPPawn::BeginPlay()
 {
 	Super::BeginPlay();
-	
 }
 
 // Called every frame
@@ -69,6 +65,89 @@ void ATPPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+
+	if (SkeletalMesh)
+	{
+		const FVector Start = SkeletalMesh->GetSocketLocation("center");
+
+		const FVector FLSocketLocation = SkeletalMesh->GetSocketLocation("frontLeft");
+		const FVector FRSocketLocation = SkeletalMesh->GetSocketLocation("frontRight");
+
+		FHitResult HitDataFL(ForceInit);
+		FHitResult HitDataFR(ForceInit);
+
+		FCollisionQueryParams CollisionParams;
+
+		//GetCharacterMovement()->GravityScale = 0.0f;
+		
+		if (GetWorld()->LineTraceSingleByChannel(HitDataFL, Start, FLSocketLocation, ECC_Visibility, CollisionParams))
+		{
+			//Print out the name of the traced actor
+			if (HitDataFL.GetActor())
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Front LEFT hit name: %s"), *HitDataFL.GetActor()->GetName()));
+			}
+		}
+
+		if (GetWorld()->LineTraceSingleByChannel(HitDataFR, Start, FRSocketLocation, ECC_Visibility, CollisionParams))
+		{
+			//Print out the name of the traced actor
+			if (HitDataFR.GetActor())
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Front RIGHT hit name: %s"), *HitDataFR.GetActor()->GetName()));
+			}
+		}
+
+		FHitResult HitDataD(ForceInit);
+		// use this to make player stick to wall
+		if (GetWorld()->LineTraceSingleByChannel(HitDataD, Start, Start - GetActorUpVector() * (Capsule->GetScaledCapsuleHalfHeight() + 10.0f), ECC_Visibility, CollisionParams))
+		{
+			//Print out the name of the traced actor
+			if (HitDataD.GetActor())
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("DOWN hit name: %s"), *HitDataD.GetActor()->GetName()));
+			}
+		}
+
+
+		FHitResult HitDataF(ForceInit);
+		// use this to make player stick to wall
+		if (GetWorld()->LineTraceSingleByChannel(HitDataF, Start, SkeletalMesh->GetSocketLocation("forward") , ECC_Visibility, CollisionParams))
+		{
+			//Print out the name of the traced actor
+			if (HitDataF.GetActor())
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Forward hit name: %s"), *HitDataF.GetActor()->GetName()));
+			}
+		}
+
+
+
+		if (CheckIfNeedToTransitionToNewSurface(HitDataD.Normal))
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to DOWN vector")));
+			TransitionToNewSurface(HitDataD);
+		}
+		else if (CheckIfNeedToTransitionToNewSurface(HitDataF.Normal))
+		{
+			//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to FORWARD vector")));
+			//TransitionToNewSurface(HitDataF);
+		}
+
+		
+		if (CheckIfNeedToTransitionToNewSurface(HitDataFL.Normal))
+		{
+			//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to left vector")));
+			//TransitionToNewSurface(HitDataFL);
+		}
+		else if (CheckIfNeedToTransitionToNewSurface(HitDataFL.Normal))
+		{
+			//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to right vector")));
+			//TransitionToNewSurface(HitDataFL);
+		}
+			
+		Capsule->AddForce(-GetActorUpVector() * 9800);
+	}
 }
 
 // Called to bind functionality to input
@@ -95,6 +174,35 @@ void ATPPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 	PlayerInputComponent->BindAction("Interact", IE_Released, this, &ATPPawn::InteractReleased);
 }
 
+bool ATPPawn::CheckIfNeedToTransitionToNewSurface(FVector HitNormal)
+{
+	return HitNormal.Y <= GetActorUpVector().Y - SurfaceTransitionThreshold ||
+		HitNormal.Y >= GetActorUpVector().Y + SurfaceTransitionThreshold ||
+		HitNormal.X <= GetActorUpVector().X - SurfaceTransitionThreshold ||
+		HitNormal.X >= GetActorUpVector().X + SurfaceTransitionThreshold;
+}
+
+void ATPPawn::TransitionToNewSurface(FHitResult HitNormal)
+{
+	Capsule->SetPhysicsAngularVelocity(FVector::ZeroVector);
+
+	//Grab a ref to the world here
+	UWorld* world = GetWorld();
+
+	//Trace to get the surface normal in front of actor
+	FVector newUp = HitNormal.ImpactNormal;
+	FVector point = HitNormal.ImpactPoint + newUp * (Capsule->GetScaledCapsuleHalfHeight() + 1.0f);
+
+	//Some math to get the new Axis
+	FVector curRight = GetActorRightVector();
+	FVector newForward = FVector::CrossProduct(curRight, newUp);
+	FVector newRight = FVector::CrossProduct(newUp, newForward);
+
+	//Build the new transform!
+	FTransform newTransform(newForward, newRight, newUp, point);
+	SetActorTransform(newTransform);
+}
+
 void ATPPawn::MoveForward(float AxisValue)
 {
 	if (AxisValue != 0)
@@ -105,6 +213,13 @@ void ATPPawn::MoveForward(float AxisValue)
 		{
 			float movementValue = CalculateHorizontalMovementValue();
 			MovementComponent->AddInputVector(GetActorForwardVector() * AxisValue);
+
+			if (GetWorld()->GetTimeSeconds() - TimeAtLastMoveMouse >= MoveMouseTransitionBeginTime)
+			{
+
+				FRotator NewRot = FMath::QInterpTo(GetControlRotation().Quaternion(), GetActorRotation().Quaternion(), 0.25f, .1f).Rotator();
+				GetController()->SetControlRotation(NewRot);
+			}
 		}
 	}
 }
@@ -113,11 +228,18 @@ void ATPPawn::MoveRight(float AxisValue)
 {
 	if (AxisValue != 0)
 	{
-		//AddMovementInput(GetActorRightVector(), AxisValue);
-		if (MovementComponent && (MovementComponent->UpdatedComponent == RootComponent))
+		// This will be commented out for now. In the future, I want the directional keys to make the player turn to move in that direction.
+		/*if (MovementComponent && (MovementComponent->UpdatedComponent == RootComponent))
 		{
 			MovementComponent->AddInputVector(GetActorRightVector() * AxisValue);
-		}
+		}*/
+		FTransform NewTransform = GetTransform();
+
+		FRotator rot = FRotator(0, AxisValue * RotationSpeed / 30.0f, 0);
+
+		NewTransform.ConcatenateRotation(rot.Quaternion());
+		NewTransform.NormalizeRotation();
+		SetActorTransform(NewTransform);
 	}
 }
 
@@ -128,6 +250,24 @@ float ATPPawn::CalculateHorizontalMovementValue()
 	if (!OnGround) { MoveVal *= InAirMovementDampener; }
 
 	return MoveVal;
+}
+
+void ATPPawn::AddControllerPitchInput(float AxisValue)
+{
+	Super::AddControllerPitchInput(AxisValue);
+	if (AxisValue != 0)
+	{
+		TimeAtLastMoveMouse = GetWorld()->GetTimeSeconds();
+	}
+}
+
+void ATPPawn::AddControllerYawInput(float AxisValue)
+{
+	Super::AddControllerYawInput(AxisValue);
+	if (AxisValue != 0)
+	{
+		TimeAtLastMoveMouse = GetWorld()->GetTimeSeconds();
+	}
 }
 
 void ATPPawn::JumpPressed()
