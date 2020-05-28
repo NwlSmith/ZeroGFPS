@@ -54,16 +54,37 @@ public:
 		float InAirMovementDampener = 0.1f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
-		float MoveMouseTransitionBeginTime = 5.0f;
+		float SurfaceTransitionThreshold = 0.985f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
-		float SurfaceTransitionThreshold = 0.05f;
+		float MoveMouseTransitionBeginTime = 3.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
 		float TimeAtLastMoveMouse = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
 		bool OnGround = true;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
+		FVector PreviousLocation;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
+		FVector RealSpeed;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Jump Parameters")
+		float MaxJumpForce = 100000.0f;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Jump Parameters")
+		float MaxJumpTime = 3.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Jump Parameters")
+		float GravityScale = 9800.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Jump Parameters")
+		float CurGravityScale = 9800.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Jump Parameters")
+		float TimeJumpPressed = 0.0f;
 
 protected:
 	// Called when the game starts or when spawned
@@ -74,8 +95,25 @@ protected:
 	void SetupMesh();
 	void SetupMovementComponent();
 
+	void UpdateRealSpeed();
+	void InAirSurfaceCalculations();
+	void OnGroundSurfaceCalculations();
+	bool CheckIfCanTransitionToNewSurface(FHitResult Hit);
 	bool CheckIfNeedToTransitionToNewSurface(FVector HitNormal);
-	void TransitionToNewSurface(FHitResult HitNormal);
+	void TransitionToNewSurface(FHitResult Hit);
+	void GroundTransitionCalculations(bool TraceHitObj);
+
+	void NotifyHit
+	(
+		UPrimitiveComponent * MyComp,
+		AActor * Other,
+		UPrimitiveComponent * OtherComp,
+		bool bSelfMoved,
+		FVector HitLocation,
+		FVector HitNormal,
+		FVector NormalImpulse,
+		const FHitResult & Hit
+	);
 
 	void MoveForward(float AxisValue);
 	void MoveRight(float AxisValue);
@@ -89,12 +127,16 @@ protected:
 	void Interact();
 	void InteractReleased();
 
+	void StdPrint(FString message);
+
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+
+	virtual UPawnMovementComponent* GetMovementComponent() const override;
 
 
 	UFUNCTION()

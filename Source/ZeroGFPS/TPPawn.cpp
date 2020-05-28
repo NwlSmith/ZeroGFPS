@@ -2,6 +2,7 @@
 
 
 #include "TPPawn.h"
+#include "DrawDebugHelpers.h"
 
 // Sets default values
 ATPPawn::ATPPawn()
@@ -14,6 +15,8 @@ ATPPawn::ATPPawn()
 	SetupCamera();
 	SetupMesh();
 	SetupMovementComponent();
+
+	PreviousLocation = GetActorLocation();
 
 	// Take control of the default player
 	AutoPossessPlayer = EAutoReceiveInput::Player0;
@@ -54,100 +57,15 @@ void ATPPawn::SetupMovementComponent()
 	MovementComponent->UpdatedComponent = RootComponent;
 }
 
+UPawnMovementComponent* ATPPawn::GetMovementComponent() const
+{
+	return MovementComponent;
+}
+
 // Called when the game starts or when spawned
 void ATPPawn::BeginPlay()
 {
 	Super::BeginPlay();
-}
-
-// Called every frame
-void ATPPawn::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-
-
-	if (SkeletalMesh)
-	{
-		const FVector Start = SkeletalMesh->GetSocketLocation("center");
-
-		const FVector FLSocketLocation = SkeletalMesh->GetSocketLocation("frontLeft");
-		const FVector FRSocketLocation = SkeletalMesh->GetSocketLocation("frontRight");
-
-		FHitResult HitDataFL(ForceInit);
-		FHitResult HitDataFR(ForceInit);
-
-		FCollisionQueryParams CollisionParams;
-
-		//GetCharacterMovement()->GravityScale = 0.0f;
-		
-		if (GetWorld()->LineTraceSingleByChannel(HitDataFL, Start, FLSocketLocation, ECC_Visibility, CollisionParams))
-		{
-			//Print out the name of the traced actor
-			if (HitDataFL.GetActor())
-			{
-				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Front LEFT hit name: %s"), *HitDataFL.GetActor()->GetName()));
-			}
-		}
-
-		if (GetWorld()->LineTraceSingleByChannel(HitDataFR, Start, FRSocketLocation, ECC_Visibility, CollisionParams))
-		{
-			//Print out the name of the traced actor
-			if (HitDataFR.GetActor())
-			{
-				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Front RIGHT hit name: %s"), *HitDataFR.GetActor()->GetName()));
-			}
-		}
-
-		FHitResult HitDataD(ForceInit);
-		// use this to make player stick to wall
-		if (GetWorld()->LineTraceSingleByChannel(HitDataD, Start, Start - GetActorUpVector() * (Capsule->GetScaledCapsuleHalfHeight() + 10.0f), ECC_Visibility, CollisionParams))
-		{
-			//Print out the name of the traced actor
-			if (HitDataD.GetActor())
-			{
-				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("DOWN hit name: %s"), *HitDataD.GetActor()->GetName()));
-			}
-		}
-
-
-		FHitResult HitDataF(ForceInit);
-		// use this to make player stick to wall
-		if (GetWorld()->LineTraceSingleByChannel(HitDataF, Start, SkeletalMesh->GetSocketLocation("forward") , ECC_Visibility, CollisionParams))
-		{
-			//Print out the name of the traced actor
-			if (HitDataF.GetActor())
-			{
-				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Forward hit name: %s"), *HitDataF.GetActor()->GetName()));
-			}
-		}
-
-
-
-		if (CheckIfNeedToTransitionToNewSurface(HitDataD.Normal))
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to DOWN vector")));
-			TransitionToNewSurface(HitDataD);
-		}
-		else if (CheckIfNeedToTransitionToNewSurface(HitDataF.Normal))
-		{
-			//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to FORWARD vector")));
-			//TransitionToNewSurface(HitDataF);
-		}
-
-		
-		if (CheckIfNeedToTransitionToNewSurface(HitDataFL.Normal))
-		{
-			//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to left vector")));
-			//TransitionToNewSurface(HitDataFL);
-		}
-		else if (CheckIfNeedToTransitionToNewSurface(HitDataFL.Normal))
-		{
-			//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to right vector")));
-			//TransitionToNewSurface(HitDataFL);
-		}
-			
-		Capsule->AddForce(-GetActorUpVector() * 9800);
-	}
 }
 
 // Called to bind functionality to input
@@ -174,24 +92,147 @@ void ATPPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 	PlayerInputComponent->BindAction("Interact", IE_Released, this, &ATPPawn::InteractReleased);
 }
 
-bool ATPPawn::CheckIfNeedToTransitionToNewSurface(FVector HitNormal)
+// Called every frame
+void ATPPawn::Tick(float DeltaTime)
 {
-	return HitNormal.Y <= GetActorUpVector().Y - SurfaceTransitionThreshold ||
-		HitNormal.Y >= GetActorUpVector().Y + SurfaceTransitionThreshold ||
-		HitNormal.X <= GetActorUpVector().X - SurfaceTransitionThreshold ||
-		HitNormal.X >= GetActorUpVector().X + SurfaceTransitionThreshold;
+	Super::Tick(DeltaTime);
+
+
+	if (SkeletalMesh)
+	{
+
+		StdPrint(FString::Printf(TEXT("Velocity: %s"), *GetVelocity().ToString()));
+		
+		UpdateRealSpeed();
+
+		if (OnGround)
+			OnGroundSurfaceCalculations();
+		else
+			InAirSurfaceCalculations();
+		Capsule->AddForce(-GetActorUpVector() * CurGravityScale);
+
+		if (GetWorld()->GetTimeSeconds() - TimeAtLastMoveMouse >= MoveMouseTransitionBeginTime)
+		{
+
+			FRotator NewRot = FMath::QInterpTo(GetControlRotation().Quaternion(), GetActorRotation().Quaternion(), 0.25f, .1f).Rotator();
+			GetController()->SetControlRotation(NewRot);
+		}
+	}
 }
 
-void ATPPawn::TransitionToNewSurface(FHitResult HitNormal)
+void ATPPawn::UpdateRealSpeed()
 {
-	Capsule->SetPhysicsAngularVelocity(FVector::ZeroVector);
+	RealSpeed = (GetActorLocation() - PreviousLocation) / GetWorld()->GetDeltaSeconds();
+	PreviousLocation = GetActorLocation();
+}
 
+void ATPPawn::InAirSurfaceCalculations()
+{
+	// create tarray for hit results
+	TArray<FHitResult> OutHits;
+
+	// create a collision sphere
+	FCollisionShape Sphere = FCollisionShape::MakeSphere(110.0f);
+
+	// draw collision sphere
+	//DrawDebugSphere(GetWorld(), GetActorLocation(), Sphere.GetSphereRadius(), 50, FColor::Purple, true);
+
+	// check if something got hit in the sweep
+	bool isHit = GetWorld()->SweepMultiByChannel(OutHits, GetActorLocation(), GetActorLocation(), FQuat::Identity, ECC_Visibility, Sphere);
+
+	// Update OnGround
+	GroundTransitionCalculations(isHit);
+
+	if (isHit)
+		TransitionToNewSurface(OutHits[0]);
+}
+
+void ATPPawn::OnGroundSurfaceCalculations()
+{
+	// Retrieve locations of Sockets on SkeletalMesh
+	const FVector Center = SkeletalMesh->GetSocketLocation("center");
+	const FVector Under = SkeletalMesh->GetSocketLocation("down");
+	//const FVector Forward = SkeletalMesh->GetSocketLocation("forward"); // may remove
+	const FVector ForwardBot = SkeletalMesh->GetSocketLocation("forwardBot");
+	//const FVector Back = SkeletalMesh->GetSocketLocation("back"); // may remove
+	const FVector BackBot = SkeletalMesh->GetSocketLocation("backBot");
+
+	// Create HitResults to hold hit data.
+	FHitResult HitDataD(ForceInit);  // Check downwards
+	//FHitResult HitDataF(ForceInit);  // Check forwards
+	FHitResult HitDataFB(ForceInit); // Check forward bottom
+	//FHitResult HitDataB(ForceInit);  // Check back NEED TO CHECK IF MOVING BACK
+	FHitResult HitDataBB(ForceInit); // Check back bottom
+	FHitResult HitDataFU(ForceInit); // Check forward to under vector
+	FHitResult HitDataBU(ForceInit); // Check back to under vector
+
+	FCollisionQueryParams CollisionParams;
+
+	// Perform line traces
+	GetWorld()->LineTraceSingleByChannel(HitDataD, Center, Under, ECC_Visibility, CollisionParams);
+	GetWorld()->LineTraceSingleByChannel(HitDataFB, Center, ForwardBot, ECC_Visibility, CollisionParams);
+	GetWorld()->LineTraceSingleByChannel(HitDataFU, ForwardBot, Under, ECC_Visibility, CollisionParams);
+
+	// Update OnGround
+	GroundTransitionCalculations(HitDataD.GetActor() != nullptr);
+	
+	//FVector::DotProduct(MovementComponent->Velocity, GetActorForwardVector())
+
+	// Firstly, keep the pawn upright.
+	if (CheckIfCanTransitionToNewSurface(HitDataD))
+	{
+		StdPrint(FString::Printf(TEXT("DOWN hit name: %s"), *HitDataD.GetActor()->GetName()));
+		StdPrint(FString::Printf(TEXT("Transitioning to DOWN vector")));
+		TransitionToNewSurface(HitDataD);
+	}
+	// If there is a wall in front of the pawn, transition to it
+	else if (CheckIfCanTransitionToNewSurface(HitDataFB))
+	{
+		StdPrint(FString::Printf(TEXT("ForwardBot hit name: %s"), *HitDataFB.GetActor()->GetName()));
+		StdPrint(FString::Printf(TEXT("Transitioning to FORWARDBOTTOM vector")));
+		TransitionToNewSurface(HitDataFB);
+	}
+	// If there is nothing in front of the player, and the player is on a ledge, transition to it.
+	else if (!HitDataFB.GetActor() && CheckIfCanTransitionToNewSurface(HitDataFU))
+	{
+		StdPrint(FString::Printf(TEXT("Forward -> under hit name: %s"), *HitDataFU.GetActor()->GetName()));
+		StdPrint(FString::Printf(TEXT("Transitioning to forward -> under vector")));
+		TransitionToNewSurface(HitDataFU);
+	}
+	/*else if (HitDataBB.GetActor() && CheckIfNeedToTransitionToNewSurface(HitDataBB.Normal))
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Back Bottom hit name: %s"), *HitDataBB.GetActor()->GetName()));
+		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to BottomBack vector")));
+		//TransitionToNewSurface(HitDataBB);
+	}
+	else if (HitDataFR.GetActor() && CheckIfNeedToTransitionToNewSurface(HitDataFR.Normal))
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Front RIGHT hit name: %s"), *HitDataFR.GetActor()->GetName()));
+		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to right vector")));
+		//TransitionToNewSurface(HitDataFR);
+	}*/
+}
+
+bool ATPPawn::CheckIfCanTransitionToNewSurface(FHitResult Hit)
+{
+	return Hit.GetActor() && CheckIfNeedToTransitionToNewSurface(Hit.Normal);
+}
+
+bool ATPPawn::CheckIfNeedToTransitionToNewSurface(FVector HitNormal)
+{
+	//StdPrint(FString::Printf(TEXT("Normal : %s Up : %s"), *HitNormal.ToString(), *GetActorUpVector().ToString()));
+	//StdPrint(FString::Printf(TEXT("Dot : %f"), FVector::DotProduct(HitNormal, GetActorUpVector())));
+	return FVector::DotProduct(HitNormal, GetActorUpVector()) < SurfaceTransitionThreshold;
+}
+
+void ATPPawn::TransitionToNewSurface(FHitResult Hit)
+{
 	//Grab a ref to the world here
 	UWorld* world = GetWorld();
 
 	//Trace to get the surface normal in front of actor
-	FVector newUp = HitNormal.ImpactNormal;
-	FVector point = HitNormal.ImpactPoint + newUp * (Capsule->GetScaledCapsuleHalfHeight() + 1.0f);
+	FVector newUp = Hit.Normal;
+	FVector point = Hit.ImpactPoint + newUp * (Capsule->GetScaledCapsuleHalfHeight() + 1.0f);
 
 	//Some math to get the new Axis
 	FVector curRight = GetActorRightVector();
@@ -201,6 +242,55 @@ void ATPPawn::TransitionToNewSurface(FHitResult HitNormal)
 	//Build the new transform!
 	FTransform newTransform(newForward, newRight, newUp, point);
 	SetActorTransform(newTransform);
+	SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
+
+	Capsule->SetPhysicsLinearVelocity(FVector::ZeroVector);
+	Capsule->SetPhysicsAngularVelocity(FVector::ZeroVector);
+}
+
+void ATPPawn::GroundTransitionCalculations(bool TraceHitObj)
+{
+	// If was on the ground last tick and is now not on the ground...
+	if (OnGround && !TraceHitObj)
+	{
+		// Turn off gravity
+		CurGravityScale = 0.0f;
+		StdPrint(FString::Printf(TEXT("WAS ON GROUND AND NOW IS NOT")));
+	}
+	// If was NOT on ground last tick and is now on ground...
+	else if (!OnGround && TraceHitObj)
+	{
+		// Turn on gravity and get rid of any velocity.
+		CurGravityScale = GravityScale;
+		Capsule->SetPhysicsLinearVelocity(FVector::ZeroVector);
+		Capsule->SetPhysicsAngularVelocity(FVector::ZeroVector);
+		StdPrint(FString::Printf(TEXT("WAS NOT ON GROUND AND NOW IS")));
+	}
+	OnGround = TraceHitObj;
+}
+
+void ATPPawn::NotifyHit
+(
+	UPrimitiveComponent * MyComp,
+	AActor * Other,
+	UPrimitiveComponent * OtherComp,
+	bool bSelfMoved,
+	FVector HitLocation,
+	FVector HitNormal,
+	FVector NormalImpulse,
+	const FHitResult & Hit
+)
+{
+	// Don't do in-air collision calculations when pawn is not in the air.
+	if (OnGround)
+		return;
+
+	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
+
+	//TransitionToNewSurface(HitNormal);
+
+
+	UE_LOG(LogTemp, Warning, TEXT("Actor was hit"));
 }
 
 void ATPPawn::MoveForward(float AxisValue)
@@ -213,13 +303,6 @@ void ATPPawn::MoveForward(float AxisValue)
 		{
 			float movementValue = CalculateHorizontalMovementValue();
 			MovementComponent->AddInputVector(GetActorForwardVector() * AxisValue);
-
-			if (GetWorld()->GetTimeSeconds() - TimeAtLastMoveMouse >= MoveMouseTransitionBeginTime)
-			{
-
-				FRotator NewRot = FMath::QInterpTo(GetControlRotation().Quaternion(), GetActorRotation().Quaternion(), 0.25f, .1f).Rotator();
-				GetController()->SetControlRotation(NewRot);
-			}
 		}
 	}
 }
@@ -274,8 +357,8 @@ void ATPPawn::JumpPressed()
 {
 	if (OnGround)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Jump Pressed")));
-		//TimeJumpPressed = Wrld->GetTimeSeconds();
+		StdPrint(FString::Printf(TEXT("Jump Pressed")));
+		TimeJumpPressed = GetWorld()->GetTimeSeconds();
 		// Trigger lowering and shaking animation
 	}
 
@@ -286,9 +369,9 @@ void ATPPawn::JumpReleased()
 	if (OnGround)
 	{
 		float jumpPower = 1000.0f;
-		//jumpPower = MaxJumpForce * FMath::Clamp(Wrld->GetTimeSeconds() - TimeJumpPressed, 0.0f, MaxJumpTime) / MaxJumpTime;
+		jumpPower = MaxJumpForce * FMath::Clamp(GetWorld()->GetTimeSeconds() - TimeJumpPressed, 0.0f, MaxJumpTime) / MaxJumpTime;
 
-		//LaunchCharacter(GetActorUpVector() * jumpPower, false, false);
+		Capsule->AddImpulse(GetActorUpVector() * jumpPower);
 
 		//GetCharacterMovement()->GravityScale = 0.0f;
 		// Stop lowering and shaking animation.
@@ -306,3 +389,8 @@ void ATPPawn::InteractReleased()
 	UE_LOG(LogTemp, Warning, TEXT("E was released"));
 }
 
+void ATPPawn::StdPrint(FString message)
+{
+	if (true)
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, message);
+}

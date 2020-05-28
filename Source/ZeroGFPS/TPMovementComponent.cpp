@@ -29,5 +29,6 @@ void UTPMovementComponent::TickComponent(float DeltaTime, enum ELevelTick TickTy
 		{
 			SlideAlongSurface(DesiredMovementThisFrame, 1.f - Hit.Time, Hit.Normal, Hit);
 		}
+		
 	}
 }
