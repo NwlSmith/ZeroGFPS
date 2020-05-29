@@ -101,7 +101,7 @@ void ATPPawn::Tick(float DeltaTime)
 	if (SkeletalMesh)
 	{
 
-		StdPrint(FString::Printf(TEXT("Velocity: %s"), *GetVelocity().ToString()));
+		//StdPrint(FString::Printf(TEXT("Velocity: %s"), *GetVelocity().ToString()));
 		
 		UpdateRealSpeed();
 
@@ -342,6 +342,7 @@ float ATPPawn::CalculateHorizontalMovementValue()
 void ATPPawn::AddControllerPitchInput(float AxisValue)
 {
 	Super::AddControllerPitchInput(AxisValue);
+	
 	if (AxisValue != 0)
 	{
 		TimeAtLastMoveMouse = GetWorld()->GetTimeSeconds();
