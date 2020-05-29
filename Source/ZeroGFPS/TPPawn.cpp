@@ -301,8 +301,12 @@ void ATPPawn::MoveForward(float AxisValue)
 		//AddMovementInput(GetActorForwardVector(), AxisValue, true);
 		if (MovementComponent && (MovementComponent->UpdatedComponent == RootComponent))
 		{
-			float movementValue = CalculateHorizontalMovementValue();
-			MovementComponent->AddInputVector(GetActorForwardVector() * AxisValue);
+			FVector movementDirection = GetActorForwardVector();
+			movementDirection = FVector::VectorPlaneProject(GetControlRotation().Vector(), GetActorUpVector()).GetSafeNormal();
+			MovementComponent->AddInputVector(movementDirection * AxisValue);
+
+			FRotator NewRot = FMath::QInterpTo(GetActorRotation().Quaternion(), movementDirection.ToOrientationQuat(), 0.5f, .25f).Rotator();
+			SetActorRotation(NewRot);
 		}
 	}
 }
@@ -312,17 +316,17 @@ void ATPPawn::MoveRight(float AxisValue)
 	if (AxisValue != 0)
 	{
 		// This will be commented out for now. In the future, I want the directional keys to make the player turn to move in that direction.
-		/*if (MovementComponent && (MovementComponent->UpdatedComponent == RootComponent))
+		if (MovementComponent && (MovementComponent->UpdatedComponent == RootComponent))
 		{
 			MovementComponent->AddInputVector(GetActorRightVector() * AxisValue);
-		}*/
+		}/*
 		FTransform NewTransform = GetTransform();
 
 		FRotator rot = FRotator(0, AxisValue * RotationSpeed / 30.0f, 0);
 
 		NewTransform.ConcatenateRotation(rot.Quaternion());
 		NewTransform.NormalizeRotation();
-		SetActorTransform(NewTransform);
+		SetActorTransform(NewTransform);*/
 	}
 }
 
