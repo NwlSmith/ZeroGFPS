@@ -10,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "TPMovementComponent.h"
+#include "TPPawnPlayerController.h"
 #include "Math/UnrealMathUtility.h"
 #include "TPPawn.generated.h"
 
@@ -39,31 +40,29 @@ public:
 	// Sets default values for this pawn's properties
 	ATPPawn();
 
-	bool Jumping = false;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
-		float MoveSpeed = 4000.0f;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
 		float MaxSpeed = 600.0f;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
-		float RotationSpeed = 75.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
 		float InAirMovementDampener = 0.1f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
-		float SurfaceTransitionThreshold = 0.985f;
+		float SurfaceTransitionThreshold = 0.99f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
-		float MoveMouseTransitionBeginTime = 3.0f;
+		float LastWallTransitionTimeInterval = 0.01f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
+		float TimeAtLastWallTransition = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
+		float MoveMouseTransitionBeginTime = 1.5f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
 		float TimeAtLastMoveMouse = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
-		bool OnGround = true;
+		bool bOnGround = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
 		FVector PreviousLocation;
@@ -71,20 +70,44 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
 		FVector RealSpeed;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
+		FRotator RelRot = FRotator(0.f, -90.f, 0.f);
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
+		FVector RelPos = FVector(0.f, 0.f, -90.f);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Socket Locations")
+		FVector SocketCenter = FVector(0.f, 0.f, 0.f);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Socket Locations")
+		FVector SocketForward = FVector(50.f, 0.f, -101.0f);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Socket Locations")
+		FVector SocketRight = FVector(0, 50.f, -101.0f);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Socket Locations")
+		FVector SocketBack = FVector(-50.f, 0.f, -101.0f);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Socket Locations")
+		FVector SocketLeft = FVector(0.f, -50.f, -101.0f);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Socket Locations")
+		FVector SocketDown = FVector(0.f, 0.f, -121.0f);
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Jump Parameters")
 		float MaxJumpForce = 100000.0f;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Jump Parameters")
 		float MaxJumpTime = 3.0f;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Jump Parameters")
+		float TimeJumpPressed = 0.0f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Jump Parameters")
 		float GravityScale = 9800.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Jump Parameters")
 		float CurGravityScale = 9800.0f;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Jump Parameters")
-		float TimeJumpPressed = 0.0f;
 
 protected:
 	// Called when the game starts or when spawned
@@ -95,13 +118,16 @@ protected:
 	void SetupMesh();
 	void SetupMovementComponent();
 
+	void MeshLerp();
 	void UpdateRealSpeed();
 	void InAirSurfaceCalculations();
 	void OnGroundSurfaceCalculations();
-	bool CheckIfCanTransitionToNewSurface(FHitResult Hit);
-	bool CheckIfNeedToTransitionToNewSurface(FVector HitNormal);
-	void TransitionToNewSurface(FHitResult Hit);
-	void GroundTransitionCalculations(bool TraceHitObj);
+	bool CheckIfCanTransitionToNewSurface(const FHitResult Hit) const;
+	bool CheckIfNeedToTransitionToNewSurface(const FVector HitNormal) const;
+	void CalculateSurfaceTransition(const FVector Socket);
+	void TransitionToNewSurface(const FHitResult Hit);
+	void GroundTransitionCalculations(const bool TraceHitObj);
+	FVector RelativeSocketLocation(const FVector Socket);
 
 	void NotifyHit
 	(
@@ -115,8 +141,8 @@ protected:
 		const FHitResult & Hit
 	);
 
-	void MoveForward(float AxisValue);
-	void MoveRight(float AxisValue);
+	void MoveForward(const float AxisValue);
+	void MoveRight(const float AxisValue);
 
 	virtual void AddControllerPitchInput(float AxisValue) override;
 	virtual void AddControllerYawInput(float AxisValue) override;
@@ -127,7 +153,6 @@ protected:
 	void Interact();
 	void InteractReleased();
 
-	void StdPrint(FString message);
 
 public:	
 	// Called every frame
@@ -141,5 +166,7 @@ public:
 
 	UFUNCTION()
 		float CalculateHorizontalMovementValue();
+	void StdPrint(const FString message);
+
 
 };

@@ -13,5 +13,10 @@ UCLASS()
 class ZEROGFPS_API ATPPawnPlayerCameraManager : public APlayerCameraManager
 {
 	GENERATED_BODY()
-	
+
+	virtual void LimitViewPitch(FRotator& ViewRotation, float InViewPitchMin, float InViewPitchMax) override;
+
+	virtual void LimitViewRoll(FRotator& ViewRotation, float InViewRollMin, float InViewRollMax) override;
+
+	virtual void LimitViewYaw(FRotator& ViewRotation, float InViewYawMin, float InViewYawMax) override;
 };

@@ -19,6 +19,7 @@ void UFPMovementComponent::TickComponent(float DeltaTime, enum ELevelTick TickTy
 
 	// Get (and then clear) the movement vector that we set in ACollidingPawn::Tick
 	FVector DesiredMovementThisFrame = ConsumeInputVector().GetClampedToMaxSize(1.0f) * DeltaTime * Pawn->CalculateHorizontalMovementValue();
+
 	if (!DesiredMovementThisFrame.IsNearlyZero())
 	{
 		FHitResult Hit;
@@ -27,6 +28,7 @@ void UFPMovementComponent::TickComponent(float DeltaTime, enum ELevelTick TickTy
 		// If we bumped into something, try to slide along it
 		if (Hit.IsValidBlockingHit())
 		{
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Sliding!!!")));
 			SlideAlongSurface(DesiredMovementThisFrame, 1.f - Hit.Time, Hit.Normal, Hit);
 		}
 	}

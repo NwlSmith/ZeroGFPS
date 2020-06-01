@@ -15,7 +15,6 @@ class ZEROGFPS_API ATPPawnPlayerController : public APlayerController
 	GENERATED_BODY()
 	
 public:
-	ATPPawnPlayerController(const FObjectInitializer& ObjectInitializer);
 
 	virtual void AddPitchInput(float Val) override;
 

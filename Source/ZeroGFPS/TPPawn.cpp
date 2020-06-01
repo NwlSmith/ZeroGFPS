@@ -47,7 +47,8 @@ void ATPPawn::SetupMesh()
 {
 	SkeletalMesh = CreateDefaultSubobject<USkeletalMeshComponent>(FName(TEXT("SkeletalMesh")));
 	SkeletalMesh->SetOwnerNoSee(false);
-	SkeletalMesh->SetupAttachment(RootComponent);
+	SkeletalMesh->SetRelativeLocationAndRotation(RelPos, RelRot);
+	//SkeletalMesh->SetupAttachment(RootComponent);
 }
 
 void ATPPawn::SetupMovementComponent()
@@ -100,12 +101,14 @@ void ATPPawn::Tick(float DeltaTime)
 
 	if (SkeletalMesh)
 	{
+		//GetActorUpVector().ToOrientationQuat().Euler();
+		//StdPrint(FString::Printf(TEXT("Up Rotation: %s"), *GetActorUpVector().ToString()));
 
-		//StdPrint(FString::Printf(TEXT("Velocity: %s"), *GetVelocity().ToString()));
+		MeshLerp();
 		
 		UpdateRealSpeed();
 
-		if (OnGround)
+		if (bOnGround)
 			OnGroundSurfaceCalculations();
 		else
 			InAirSurfaceCalculations();
@@ -118,6 +121,24 @@ void ATPPawn::Tick(float DeltaTime)
 			GetController()->SetControlRotation(NewRot);
 		}
 	}
+}
+
+void ATPPawn::MeshLerp()
+{
+	//FTransform NewTrans = FTransform(Capsule->GetComponentTransform());
+
+	//NewTrans.AddToTranslation(GetActorRotation().RotateVector(RelPos));
+	//NewTrans.ConcatenateRotation(RelRot.Quaternion());
+
+	FQuat TargetRot = Capsule->GetComponentRotation().Quaternion() * RelRot.Quaternion();
+	FVector TargetPos = Capsule->GetComponentLocation() + GetActorRotation().RotateVector(RelPos);
+
+	FQuat NewRot = FQuat::Slerp(SkeletalMesh->GetComponentRotation().Quaternion(), TargetRot, .2f);
+	FVector NewPos = FMath::Lerp(SkeletalMesh->GetComponentLocation(), TargetPos, .2f);
+
+	FTransform NewTrans = FTransform(NewRot, NewPos, FVector(1.f, 1.f, 1.f));
+
+	SkeletalMesh->SetWorldTransform(NewTrans);
 }
 
 void ATPPawn::UpdateRealSpeed()
@@ -149,87 +170,90 @@ void ATPPawn::InAirSurfaceCalculations()
 
 void ATPPawn::OnGroundSurfaceCalculations()
 {
-	// Retrieve locations of Sockets on SkeletalMesh
-	const FVector Center = SkeletalMesh->GetSocketLocation("center");
-	const FVector Under = SkeletalMesh->GetSocketLocation("down");
-	//const FVector Forward = SkeletalMesh->GetSocketLocation("forward"); // may remove
-	const FVector ForwardBot = SkeletalMesh->GetSocketLocation("forwardBot");
-	//const FVector Back = SkeletalMesh->GetSocketLocation("back"); // may remove
-	const FVector BackBot = SkeletalMesh->GetSocketLocation("backBot");
+	float forwardDot = FVector::DotProduct(RealSpeed, GetActorForwardVector());
+	float rightDot = FVector::DotProduct(RealSpeed, GetActorRightVector());
 
-	// Create HitResults to hold hit data.
+	if (GetWorld()->TimeSeconds - TimeAtLastWallTransition >= LastWallTransitionTimeInterval)
+	{
+		// If pawn moving forward
+		if (FMath::Abs(forwardDot) > FMath::Abs(rightDot) && forwardDot > 0)
+		{
+			CalculateSurfaceTransition(SocketForward);
+		}
+		else if (FMath::Abs(forwardDot) > FMath::Abs(rightDot) && forwardDot < 0)
+		{
+			CalculateSurfaceTransition(SocketBack);
+		}
+		else if (FMath::Abs(forwardDot) < FMath::Abs(rightDot) && rightDot > 0)
+		{
+			CalculateSurfaceTransition(SocketRight);
+		}
+		else if (FMath::Abs(forwardDot) < FMath::Abs(rightDot) && rightDot < 0)
+		{
+			CalculateSurfaceTransition(SocketLeft);
+		}
+	}
+}
+
+void ATPPawn::CalculateSurfaceTransition(const FVector Socket)
+{
+	//StdPrint(FString::Printf(TEXT("Moving : %s"), *socket));
+	const FVector Center = RelativeSocketLocation(SocketCenter);
+	const FVector Under = RelativeSocketLocation(SocketDown);
+	const FVector TargetSoc = RelativeSocketLocation(Socket);
+
 	FHitResult HitDataD(ForceInit);  // Check downwards
-	//FHitResult HitDataF(ForceInit);  // Check forwards
-	FHitResult HitDataFB(ForceInit); // Check forward bottom
-	//FHitResult HitDataB(ForceInit);  // Check back NEED TO CHECK IF MOVING BACK
-	FHitResult HitDataBB(ForceInit); // Check back bottom
-	FHitResult HitDataFU(ForceInit); // Check forward to under vector
-	FHitResult HitDataBU(ForceInit); // Check back to under vector
+	FHitResult HitDataUp(ForceInit);  // Check wall transition
+	FHitResult HitDataUnder(ForceInit);  // Check cliff transition
 
 	FCollisionQueryParams CollisionParams;
 
-	// Perform line traces
-	GetWorld()->LineTraceSingleByChannel(HitDataD, Center, Under, ECC_Visibility, CollisionParams);
-	GetWorld()->LineTraceSingleByChannel(HitDataFB, Center, ForwardBot, ECC_Visibility, CollisionParams);
-	GetWorld()->LineTraceSingleByChannel(HitDataFU, ForwardBot, Under, ECC_Visibility, CollisionParams);
+	//StdPrint(FString::Printf(TEXT("Moving FORWARD")));
 
-	// Update OnGround
-	GroundTransitionCalculations(HitDataD.GetActor() != nullptr);
-	
-	//FVector::DotProduct(MovementComponent->Velocity, GetActorForwardVector())
+	// Perform line traces
+	bool bHitGround = GetWorld()->LineTraceSingleByChannel(HitDataD, Center, Under, ECC_Visibility, CollisionParams);
+	GetWorld()->LineTraceSingleByChannel(HitDataUp, Center, TargetSoc, ECC_Visibility, CollisionParams);
+	GetWorld()->LineTraceSingleByChannel(HitDataUnder, TargetSoc, Under, ECC_Visibility, CollisionParams);
+
+	GroundTransitionCalculations(bHitGround);
 
 	// Firstly, keep the pawn upright.
 	if (CheckIfCanTransitionToNewSurface(HitDataD))
 	{
-		StdPrint(FString::Printf(TEXT("DOWN hit name: %s"), *HitDataD.GetActor()->GetName()));
+		StdPrint(FString::Printf(TEXT("%s hit name: %s"), *Socket.ToString(), *HitDataD.GetActor()->GetName()));
 		StdPrint(FString::Printf(TEXT("Transitioning to DOWN vector")));
 		TransitionToNewSurface(HitDataD);
 	}
 	// If there is a wall in front of the pawn, transition to it
-	else if (CheckIfCanTransitionToNewSurface(HitDataFB))
+	else if (CheckIfCanTransitionToNewSurface(HitDataUp))
 	{
-		StdPrint(FString::Printf(TEXT("ForwardBot hit name: %s"), *HitDataFB.GetActor()->GetName()));
-		StdPrint(FString::Printf(TEXT("Transitioning to FORWARDBOTTOM vector")));
-		TransitionToNewSurface(HitDataFB);
+		StdPrint(FString::Printf(TEXT("%s up hit name: %s"), *Socket.ToString(), *HitDataUp.GetActor()->GetName()));
+		StdPrint(FString::Printf(TEXT("Transitioning to %s up vector"), *Socket.ToString()));
+		TransitionToNewSurface(HitDataUp);
 	}
 	// If there is nothing in front of the player, and the player is on a ledge, transition to it.
-	else if (!HitDataFB.GetActor() && CheckIfCanTransitionToNewSurface(HitDataFU))
+	else if (!HitDataUp.GetActor() && CheckIfCanTransitionToNewSurface(HitDataUnder))
 	{
-		StdPrint(FString::Printf(TEXT("Forward -> under hit name: %s"), *HitDataFU.GetActor()->GetName()));
-		StdPrint(FString::Printf(TEXT("Transitioning to forward -> under vector")));
-		TransitionToNewSurface(HitDataFU);
+		StdPrint(FString::Printf(TEXT("%s -> under hit name: %s"), *Socket.ToString(), *HitDataUnder.GetActor()->GetName()));
+		StdPrint(FString::Printf(TEXT("Transitioning to %s -> under vector"), *Socket.ToString()));
+		TransitionToNewSurface(HitDataUnder);
 	}
-	/*else if (HitDataBB.GetActor() && CheckIfNeedToTransitionToNewSurface(HitDataBB.Normal))
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Back Bottom hit name: %s"), *HitDataBB.GetActor()->GetName()));
-		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to BottomBack vector")));
-		//TransitionToNewSurface(HitDataBB);
-	}
-	else if (HitDataFR.GetActor() && CheckIfNeedToTransitionToNewSurface(HitDataFR.Normal))
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Front RIGHT hit name: %s"), *HitDataFR.GetActor()->GetName()));
-		//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Transitioning to right vector")));
-		//TransitionToNewSurface(HitDataFR);
-	}*/
 }
 
-bool ATPPawn::CheckIfCanTransitionToNewSurface(FHitResult Hit)
+bool ATPPawn::CheckIfCanTransitionToNewSurface(const FHitResult Hit) const
 {
 	return Hit.GetActor() && CheckIfNeedToTransitionToNewSurface(Hit.Normal);
 }
 
-bool ATPPawn::CheckIfNeedToTransitionToNewSurface(FVector HitNormal)
+bool ATPPawn::CheckIfNeedToTransitionToNewSurface(const FVector HitNormal) const
 {
 	//StdPrint(FString::Printf(TEXT("Normal : %s Up : %s"), *HitNormal.ToString(), *GetActorUpVector().ToString()));
 	//StdPrint(FString::Printf(TEXT("Dot : %f"), FVector::DotProduct(HitNormal, GetActorUpVector())));
 	return FVector::DotProduct(HitNormal, GetActorUpVector()) < SurfaceTransitionThreshold;
 }
 
-void ATPPawn::TransitionToNewSurface(FHitResult Hit)
+void ATPPawn::TransitionToNewSurface(const FHitResult Hit)
 {
-	//Grab a ref to the world here
-	UWorld* world = GetWorld();
-
 	//Trace to get the surface normal in front of actor
 	FVector newUp = Hit.Normal;
 	FVector point = Hit.ImpactPoint + newUp * (Capsule->GetScaledCapsuleHalfHeight() + 1.0f);
@@ -246,27 +270,34 @@ void ATPPawn::TransitionToNewSurface(FHitResult Hit)
 
 	Capsule->SetPhysicsLinearVelocity(FVector::ZeroVector);
 	Capsule->SetPhysicsAngularVelocity(FVector::ZeroVector);
+
+	TimeAtLastWallTransition = GetWorld()->GetTimeSeconds();
 }
 
-void ATPPawn::GroundTransitionCalculations(bool TraceHitObj)
+void ATPPawn::GroundTransitionCalculations(const bool TraceHitObj)
 {
 	// If was on the ground last tick and is now not on the ground...
-	if (OnGround && !TraceHitObj)
+	if (bOnGround && !TraceHitObj)
 	{
 		// Turn off gravity
 		CurGravityScale = 0.0f;
 		StdPrint(FString::Printf(TEXT("WAS ON GROUND AND NOW IS NOT")));
 	}
 	// If was NOT on ground last tick and is now on ground...
-	else if (!OnGround && TraceHitObj)
+	else if (!bOnGround && TraceHitObj)
 	{
 		// Turn on gravity and get rid of any velocity.
 		CurGravityScale = GravityScale;
 		Capsule->SetPhysicsLinearVelocity(FVector::ZeroVector);
-		Capsule->SetPhysicsAngularVelocity(FVector::ZeroVector);
+		Capsule->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 		StdPrint(FString::Printf(TEXT("WAS NOT ON GROUND AND NOW IS")));
 	}
-	OnGround = TraceHitObj;
+	bOnGround = TraceHitObj;
+}
+
+FVector ATPPawn::RelativeSocketLocation(const FVector Socket)
+{
+	return Capsule->GetComponentLocation() + GetActorRotation().RotateVector(Socket);
 }
 
 void ATPPawn::NotifyHit
@@ -282,7 +313,7 @@ void ATPPawn::NotifyHit
 )
 {
 	// Don't do in-air collision calculations when pawn is not in the air.
-	if (OnGround)
+	if (bOnGround)
 		return;
 
 	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
@@ -293,7 +324,7 @@ void ATPPawn::NotifyHit
 	UE_LOG(LogTemp, Warning, TEXT("Actor was hit"));
 }
 
-void ATPPawn::MoveForward(float AxisValue)
+void ATPPawn::MoveForward(const float AxisValue)
 {
 	if (AxisValue != 0)
 	{
@@ -301,17 +332,46 @@ void ATPPawn::MoveForward(float AxisValue)
 		//AddMovementInput(GetActorForwardVector(), AxisValue, true);
 		if (MovementComponent && (MovementComponent->UpdatedComponent == RootComponent))
 		{
-			FVector movementDirection = GetActorForwardVector();
-			movementDirection = FVector::VectorPlaneProject(GetControlRotation().Vector(), GetActorUpVector()).GetSafeNormal();
-			MovementComponent->AddInputVector(movementDirection * AxisValue);
+			FVector movementDirection= FVector::VectorPlaneProject(GetControlRotation().Vector(), GetActorUpVector()).GetSafeNormal();
 
-			FRotator NewRot = FMath::QInterpTo(GetActorRotation().Quaternion(), movementDirection.ToOrientationQuat(), 0.5f, .25f).Rotator();
-			SetActorRotation(NewRot);
+
+			const FVector Center = RelativeSocketLocation(SocketCenter);
+			const FVector Under = RelativeSocketLocation(SocketDown);
+			FHitResult HitDataD(ForceInit);  // Check downwards
+			FCollisionQueryParams CollisionParams;
+			if (GetWorld()->LineTraceSingleByChannel(HitDataD, Center, Under, ECC_Visibility, CollisionParams))
+			{
+				movementDirection = FVector::VectorPlaneProject(GetControlRotation().Vector(), HitDataD.ImpactNormal).GetSafeNormal();
+			}
+
+			
+
+			// ALSO THIS IS ROTATING THE PAWN
+			
+			//FRotator NewRot = FMath::QInterpTo(GetActorRotation().Quaternion(), movementDirection.ToOrientationQuat(), 0.5f, .25f).Rotator();
+			//FVector NewVec = GetActorForwardVector().RotateAngleAxis(FMath::Acos(FVector::DotProduct(GetActorForwardVector(), movementDirection)), GetActorUpVector());
+			//SetActorRotation(NewVec.Rotation());
+
+			//Trace to get the surface normal in front of actor
+			FVector newUp = GetActorUpVector();
+			if (bOnGround)
+				newUp = HitDataD.ImpactNormal;
+			FVector point = GetActorLocation();// +newUp * (Capsule->GetScaledCapsuleHalfHeight() + 1.0f);
+
+			//Some math to get the new Axis
+			FVector newRight = FVector::CrossProduct(newUp, movementDirection);
+
+			//Build the new transform!
+			FTransform newTransform(movementDirection, newRight, newUp, point);
+			SetActorTransform(newTransform);
+			SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
+
+			MovementComponent->AddInputVector(movementDirection * AxisValue);
 		}
 	}
 }
 
-void ATPPawn::MoveRight(float AxisValue)
+void ATPPawn::MoveRight(const float AxisValue)
 {
 	if (AxisValue != 0)
 	{
@@ -322,7 +382,7 @@ void ATPPawn::MoveRight(float AxisValue)
 		}/*
 		FTransform NewTransform = GetTransform();
 
-		FRotator rot = FRotator(0, AxisValue * RotationSpeed / 30.0f, 0);
+		FRotator rot = FRotator(0, AxisValue * 75.0f / 30.0f, 0);
 
 		NewTransform.ConcatenateRotation(rot.Quaternion());
 		NewTransform.NormalizeRotation();
@@ -334,15 +394,59 @@ float ATPPawn::CalculateHorizontalMovementValue()
 {
 	float MoveVal = MaxSpeed;
 
-	if (!OnGround) { MoveVal *= InAirMovementDampener; }
+	if (!bOnGround) { MoveVal *= InAirMovementDampener; }
 
 	return MoveVal;
 }
 
 void ATPPawn::AddControllerPitchInput(float AxisValue)
 {
+	//FVector ActorRight = GetActorRightVector() * AxisValue;
+	//FRotator NewRot = FRotator::FRotator(ActorRight.Y, ActorRight.Z, ActorRight.X);
+	//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Actor Forward : %s"), *ActorRight.ToString()));
+	//Super::AddControllerRollInput(NewRot.Roll);
+	//Super::AddControllerPitchInput(NewRot.Pitch);
+	//Super::AddControllerYawInput(NewRot.Yaw);
+	//GetController()->AddActorLocalRotation(FVector(0.f, AxisValue, 0.f).ToOrientationQuat());
+	//GetController()->SetControlRotation()
+	/*
+	if (FVector::DotProduct(GetActorUpVector(), FVector::UpVector) > 0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(-AxisValue, 0, 0));
+		//Super::AddControllerPitchInput(AxisValue);
+	}
+	else if (FVector::DotProduct(GetActorUpVector(), FVector::UpVector) < -0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(AxisValue, 0, 0));
+
+		//Super::AddControllerPitchInput(-AxisValue);
+	}
+	else if (FVector::DotProduct(GetActorUpVector(), FVector::RightVector) > 0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(0, -AxisValue, 0));
+
+		//Super::AddControllerYawInput(AxisValue);
+	}
+	else if (FVector::DotProduct(GetActorUpVector(), FVector::RightVector) < -0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(0, AxisValue, 0));
+
+		//Super::AddControllerYawInput(-AxisValue);
+	}
+	else if (FVector::DotProduct(GetActorUpVector(), FVector::ForwardVector) > 0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(0, 0, -AxisValue));
+
+		//Super::AddControllerRollInput(AxisValue);
+	}
+	else if (FVector::DotProduct(GetActorUpVector(), FVector::ForwardVector) < -0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(0, 0, AxisValue));
+
+		//Super::AddControllerRollInput(-AxisValue);
+	}*/
+
 	Super::AddControllerPitchInput(AxisValue);
-	
 	if (AxisValue != 0)
 	{
 		TimeAtLastMoveMouse = GetWorld()->GetTimeSeconds();
@@ -351,6 +455,52 @@ void ATPPawn::AddControllerPitchInput(float AxisValue)
 
 void ATPPawn::AddControllerYawInput(float AxisValue)
 {
+	/*FVector InputVec = FVector(0.f, 0.f, AxisValue);
+	FVector NewInputVec = GetActorUpVector().Rotation().RotateVector(InputVec);
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Actor Up : %s"), *GetActorUpVector().Rotation().ToString()));
+	//Super::AddControllerRollInput(NewInputVec.X);
+	Super::AddControllerPitchInput(NewInputVec.Y);
+	Super::AddControllerYawInput(NewInputVec.Z);
+	FVector ActorUp = GetActorUpVector() * AxisValue;
+	FRotator NewRot = FRotator::FRotator(ActorUp.Y, ActorUp.Z, 0.f);
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Actor Up : %s"), *ActorUp.ToString()));
+	Super::AddControllerRollInput(NewRot.Roll);
+	Super::AddControllerPitchInput(NewRot.Pitch);
+	Super::AddControllerYawInput(NewRot.Yaw);
+	*/
+	/*
+	if (FVector::DotProduct(GetActorUpVector(), FVector::UpVector) > 0.95f)
+	{
+
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(0, AxisValue, 0));
+		//Super::AddControllerYawInput(AxisValue);
+	}
+	else if (FVector::DotProduct(GetActorUpVector(), FVector::UpVector) < -0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(0, -AxisValue, 0));
+		//Super::AddControllerYawInput(-AxisValue);
+	}
+	else if (FVector::DotProduct(GetActorUpVector(), FVector::RightVector) > 0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(AxisValue, 0, 0));
+		//Super::AddControllerRollInput(AxisValue);
+	}
+	else if (FVector::DotProduct(GetActorUpVector(), FVector::RightVector) < -0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(-AxisValue, 0, 0));
+		//Super::AddControllerRollInput(-AxisValue);
+	}
+	else if (FVector::DotProduct(GetActorUpVector(), FVector::ForwardVector) > 0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(0, 0, AxisValue));
+		//Super::AddControllerPitchInput(AxisValue);
+	}
+	else if (FVector::DotProduct(GetActorUpVector(), FVector::ForwardVector) < -0.95f)
+	{
+		GetController()->SetControlRotation(GetController()->GetControlRotation() + FRotator(0, 0, -AxisValue));
+		//Super::AddControllerPitchInput(-AxisValue);
+	}*/
+
 	Super::AddControllerYawInput(AxisValue);
 	if (AxisValue != 0)
 	{
@@ -360,7 +510,7 @@ void ATPPawn::AddControllerYawInput(float AxisValue)
 
 void ATPPawn::JumpPressed()
 {
-	if (OnGround)
+	if (bOnGround)
 	{
 		StdPrint(FString::Printf(TEXT("Jump Pressed")));
 		TimeJumpPressed = GetWorld()->GetTimeSeconds();
@@ -371,12 +521,16 @@ void ATPPawn::JumpPressed()
 
 void ATPPawn::JumpReleased()
 {
-	if (OnGround)
+	if (bOnGround)
 	{
 		float jumpPower = 1000.0f;
 		jumpPower = MaxJumpForce * FMath::Clamp(GetWorld()->GetTimeSeconds() - TimeJumpPressed, 0.0f, MaxJumpTime) / MaxJumpTime;
 
+
+
 		Capsule->AddImpulse(GetActorUpVector() * jumpPower);
+
+		Capsule->AddImpulse(Capsule->GetMass() * RealSpeed);
 
 		//GetCharacterMovement()->GravityScale = 0.0f;
 		// Stop lowering and shaking animation.
@@ -394,7 +548,7 @@ void ATPPawn::InteractReleased()
 	UE_LOG(LogTemp, Warning, TEXT("E was released"));
 }
 
-void ATPPawn::StdPrint(FString message)
+void ATPPawn::StdPrint(const FString message)
 {
 	if (true)
 		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, message);

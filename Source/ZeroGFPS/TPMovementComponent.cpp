@@ -19,6 +19,7 @@ void UTPMovementComponent::TickComponent(float DeltaTime, enum ELevelTick TickTy
 
 	// Get (and then clear) the movement vector that we set in ACollidingPawn::Tick
 	FVector DesiredMovementThisFrame = ConsumeInputVector().GetClampedToMaxSize(1.0f) * DeltaTime * Pawn->CalculateHorizontalMovementValue();
+	//Pawn->StdPrint(FString::Printf(TEXT("DesiredMovement: %s"), *DesiredMovementThisFrame.ToString()));
 	if (!DesiredMovementThisFrame.IsNearlyZero())
 	{
 		FHitResult Hit;
