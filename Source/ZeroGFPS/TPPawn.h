@@ -56,13 +56,19 @@ public:
 		float TimeAtLastWallTransition = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Movement Parameters")
-		float MoveMouseTransitionBeginTime = 1.5f;
+		float MoveMouseTransitionBeginTime = 0.5f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
 		float TimeAtLastMoveMouse = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
 		bool bOnGround = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
+		bool bSprinting = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
+		bool SprintingMoveMult = 1.5f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
 		FVector PreviousLocation;
@@ -149,6 +155,9 @@ protected:
 
 	void JumpPressed();
 	void JumpReleased();
+
+	void SprintPressed();
+	void SprintReleased();
 
 	void Interact();
 	void InteractReleased();

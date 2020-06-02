@@ -88,9 +88,14 @@ void ATPPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ATPPawn::JumpPressed);
 	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ATPPawn::JumpReleased);
 
+	// Sprint Activation
+	PlayerInputComponent->BindAction("Sprint", IE_Pressed, this, &ATPPawn::SprintPressed);
+	PlayerInputComponent->BindAction("Sprint", IE_Released, this, &ATPPawn::SprintReleased);
+
 	// Simple Action
 	PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &ATPPawn::Interact);
 	PlayerInputComponent->BindAction("Interact", IE_Released, this, &ATPPawn::InteractReleased);
+
 }
 
 // Called every frame
@@ -282,6 +287,7 @@ void ATPPawn::GroundTransitionCalculations(const bool TraceHitObj)
 		// Turn off gravity
 		CurGravityScale = 0.0f;
 		StdPrint(FString::Printf(TEXT("WAS ON GROUND AND NOW IS NOT")));
+		bSprinting = false;
 	}
 	// If was NOT on ground last tick and is now on ground...
 	else if (!bOnGround && TraceHitObj)
@@ -394,7 +400,14 @@ float ATPPawn::CalculateHorizontalMovementValue()
 {
 	float MoveVal = MaxSpeed;
 
-	if (!bOnGround) { MoveVal *= InAirMovementDampener; }
+	if (!bOnGround)
+	{
+		MoveVal *= InAirMovementDampener;
+	}
+	else if (bSprinting)
+	{
+		MoveVal *= SprintingMoveMult;
+	}
 
 	return MoveVal;
 }
@@ -535,6 +548,21 @@ void ATPPawn::JumpReleased()
 		//GetCharacterMovement()->GravityScale = 0.0f;
 		// Stop lowering and shaking animation.
 	}
+}
+
+void ATPPawn::SprintPressed()
+{
+	StdPrint(FString::Printf(TEXT("PRESSED SPRINT")));
+	if (FVector::DotProduct(RealSpeed, GetActorForwardVector()) > .9f)
+	{
+		StdPrint(FString::Printf(TEXT("STARTED SPRINTING")));
+		bSprinting = true;
+	}
+}
+
+void ATPPawn::SprintReleased()
+{
+	bSprinting = false;
 }
 
 void ATPPawn::Interact()
