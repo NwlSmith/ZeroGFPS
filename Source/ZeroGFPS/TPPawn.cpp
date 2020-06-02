@@ -288,6 +288,7 @@ void ATPPawn::GroundTransitionCalculations(const bool TraceHitObj)
 		CurGravityScale = 0.0f;
 		StdPrint(FString::Printf(TEXT("WAS ON GROUND AND NOW IS NOT")));
 		bSprinting = false;
+		bJumping = false;
 	}
 	// If was NOT on ground last tick and is now on ground...
 	else if (!bOnGround && TraceHitObj)
@@ -297,6 +298,7 @@ void ATPPawn::GroundTransitionCalculations(const bool TraceHitObj)
 		Capsule->SetPhysicsLinearVelocity(FVector::ZeroVector);
 		Capsule->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 		StdPrint(FString::Printf(TEXT("WAS NOT ON GROUND AND NOW IS")));
+		bJumping = false;
 	}
 	bOnGround = TraceHitObj;
 }
@@ -418,6 +420,36 @@ float ATPPawn::CalculateHorizontalMovementValue()
 	return MoveVal;
 }
 
+float ATPPawn::CalculateHealthFraction()
+{
+	return FMath::Clamp(CurHealth / MaxHealth, 0.0f, 1.0f);
+}
+
+float ATPPawn::CalculateJumpHoldFraction()
+{
+	if (!bJumping)
+	{
+		TimeJumpPressed = GetWorld()->GetTimeSeconds();
+		return 0.0f;
+	}
+	return FMath::Clamp(GetWorld()->GetTimeSeconds() - TimeJumpPressed, 0.0f, MaxJumpTime) / MaxJumpTime;
+}
+
+void ATPPawn::UpdateHealth(float Delta)
+{
+	CurHealth += Delta;
+
+	if (CurHealth <= 0.f)
+	{
+		KillPawn();
+	}
+}
+
+void ATPPawn::KillPawn()
+{
+	StdPrint(FString::Printf(TEXT("PLAYER DIED")));
+}
+
 void ATPPawn::AddControllerPitchInput(float AxisValue)
 {
 	//FVector ActorRight = GetActorRightVector() * AxisValue;
@@ -529,9 +561,11 @@ void ATPPawn::AddControllerYawInput(float AxisValue)
 
 void ATPPawn::JumpPressed()
 {
+	bJumping = false;
 	if (bOnGround)
 	{
 		StdPrint(FString::Printf(TEXT("Jump Pressed")));
+		bJumping = true;
 		TimeJumpPressed = GetWorld()->GetTimeSeconds();
 		// Trigger lowering and shaking animation
 	}
@@ -543,7 +577,7 @@ void ATPPawn::JumpReleased()
 	if (bOnGround)
 	{
 		float jumpPower = 1000.0f;
-		jumpPower = MaxJumpForce * FMath::Clamp(GetWorld()->GetTimeSeconds() - TimeJumpPressed, 0.0f, MaxJumpTime) / MaxJumpTime;
+		jumpPower = MaxJumpForce * CalculateJumpHoldFraction();
 
 
 
@@ -554,6 +588,7 @@ void ATPPawn::JumpReleased()
 		//GetCharacterMovement()->GravityScale = 0.0f;
 		// Stop lowering and shaking animation.
 	}
+	bJumping = false;
 }
 
 void ATPPawn::SprintPressed()
@@ -575,6 +610,7 @@ void ATPPawn::Interact()
 {
 	UE_LOG(LogTemp, Warning, TEXT("E was pressed"));
 	Capsule->AddForce(GetActorUpVector() * -1.0f * 9800000.0f);
+	UpdateHealth(-5.f);
 }
 
 void ATPPawn::InteractReleased()
