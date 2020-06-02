@@ -338,6 +338,11 @@ void ATPPawn::MoveForward(const float AxisValue)
 		//AddMovementInput(GetActorForwardVector(), AxisValue, true);
 		if (MovementComponent && (MovementComponent->UpdatedComponent == RootComponent))
 		{
+			if (AxisValue < 0.f)
+			{
+				bSprinting = false;
+			}
+
 			FVector movementDirection= FVector::VectorPlaneProject(GetControlRotation().Vector(), GetActorUpVector()).GetSafeNormal();
 
 
@@ -384,6 +389,7 @@ void ATPPawn::MoveRight(const float AxisValue)
 		// This will be commented out for now. In the future, I want the directional keys to make the player turn to move in that direction.
 		if (MovementComponent && (MovementComponent->UpdatedComponent == RootComponent))
 		{
+			bSprinting = false;
 			MovementComponent->AddInputVector(GetActorRightVector() * AxisValue);
 		}/*
 		FTransform NewTransform = GetTransform();

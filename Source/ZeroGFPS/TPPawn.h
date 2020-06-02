@@ -68,7 +68,7 @@ public:
 		bool bSprinting = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
-		bool SprintingMoveMult = 1.5f;
+		float SprintingMoveMult = 1.5f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement Parameters")
 		FVector PreviousLocation;
