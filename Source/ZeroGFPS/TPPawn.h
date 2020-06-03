@@ -36,9 +36,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "MovementComponent")
 		class UTPMovementComponent* MovementComponent;
 
-
-
-	// I promise I don't normally make all my variables public!
 public:
 	// Sets default values for this pawn's properties
 	ATPPawn();
@@ -118,15 +115,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Jump Parameters")
 		float CurGravityScale = 9800.0f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Jump Parameters")
-		bool bJumping = false;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health Info")
-		float MaxHealth = 100.f;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health Info")
-		float CurHealth = 100.f;
-
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -184,23 +172,10 @@ public:
 
 	virtual UPawnMovementComponent* GetMovementComponent() const override;
 
+
 	UFUNCTION()
 		float CalculateHorizontalMovementValue();
-
-	UFUNCTION(BlueprintCallable)
-		float CalculateHealthFraction();
-
-	UFUNCTION(BlueprintCallable)
-		float CalculateJumpHoldFraction();
-
-	UFUNCTION(BlueprintCallable)
-		void UpdateHealth(float Delta);
-
-	UFUNCTION(BlueprintCallable)
-		void KillPawn();
-
-	UFUNCTION()
-		void StdPrint(const FString message);
+	void StdPrint(const FString message);
 
 
 };
