@@ -24,3 +24,9 @@ void ATPPawnPlayerController::AddYawInput(float Val)
 {
 	RotationInput.Yaw += !IsLookInputIgnored() ? Val * InputYawScale : 0.f;
 }
+
+FRotator ATPPawnPlayerController::GetWorldRotation()
+{
+	return GetDesiredRotation();
+	//return GetActorRotation();
+}

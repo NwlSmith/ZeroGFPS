@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/StaticMeshComponent.h"
+#include "DownOrientationMeshComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Math/UnrealMathUtility.h"
 #include "TPPawn.h"
@@ -22,7 +23,7 @@ protected:
 		USceneComponent* ThisRoot;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StaticMesh")
-		UStaticMeshComponent* StaticMesh;
+		UDownOrientationMeshComponent* DownMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SpringArm")
 		USpringArmComponent* SpringArm;

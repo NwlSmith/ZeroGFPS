@@ -19,4 +19,6 @@ public:
 	virtual void AddPitchInput(float Val) override;
 
 	virtual void AddYawInput(float Val) override;
+
+	FRotator GetWorldRotation();
 };

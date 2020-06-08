@@ -22,13 +22,16 @@ void AMeshCapture::SetupRoot()
 
 void AMeshCapture::SetupMesh()
 {
-	StaticMesh = CreateDefaultSubobject<UStaticMeshComponent>(FName(TEXT("Mesh")));
-	StaticMesh->SetupAttachment(ThisRoot);
+	DownMesh = CreateDefaultSubobject<UDownOrientationMeshComponent>(FName(TEXT("Down Mesh")));
+	DownMesh->CastShadow = false;
+	DownMesh->SetupAttachment(ThisRoot);
 }
 
 void AMeshCapture::SetupCapture()
 {
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(FName(TEXT("SpringArm")));
+	SpringArm->bDoCollisionTest = false;
+	SpringArm->SetVisibility(false);
 	SpringArm->SetupAttachment(ThisRoot);
 
 	Capture = CreateDefaultSubobject<USceneCaptureComponent2D>(FName(TEXT("Capture")));
@@ -39,6 +42,14 @@ void AMeshCapture::SetupCapture()
 void AMeshCapture::BeginPlay()
 {
 	Super::BeginPlay();
+	Capture->ShowOnlyActorComponents(this);
+
+	APlayerController* APC = GetWorld()->GetFirstPlayerController();
+	if (APC != nullptr)
+	{
+		DownMesh->SetTargetPawn(APC->GetPawn());
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Orange, FString::Printf(TEXT("Actor is : %s"), *DownMesh->GetTargetPawn()->GetFName().ToString()));
+	}
 	
 	//PlayerPawn = 
 }
@@ -49,9 +60,7 @@ void AMeshCapture::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 
-
-	FTransform NewTrans = FTransform();
-	//PlayerPawn
+	DownMesh->CalculateOrientation();
 
 }
 
